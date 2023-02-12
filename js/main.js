@@ -11,7 +11,8 @@ const textureContext = canvasTexture.getContext('2d');
 const contextMask = canvasMask.getContext('2d');
 
 let videoElement, net;
-let camera, renderer, scene, material, mesh, clock, counter, sliceCounter;
+let camera, renderer, scene, material, clock, counter, sliceCounter;
+let pivot1, pivot2, pivot3, pivot4, mesh1, mesh2, mesh3, mesh4;
 const startBtn = document.getElementById('start-btn');
 
 startBtn.addEventListener('click', e => {
@@ -22,11 +23,14 @@ startBtn.addEventListener('click', e => {
 init()
 
 async function init() {
- 
+
   videoElement = await initVideoStream();
 
   container.appendChild(videoElement);
   // container.appendChild(canvasMask);
+  document.body.appendChild(canvasTexture);
+  canvasTexture.style.position = 'relative';
+  canvasTexture.style.width = '100px';
 
   net = await loadBodyPix();
   // drawMask();
@@ -45,7 +49,7 @@ function initVideoStream() {
         videoElement.addEventListener('playing', (event) => {
           canvasTexture.width = canvasMask.width = videoElement.width = videoElement.videoWidth;
           canvasTexture.height = canvasMask.height = videoElement.height = videoElement.videoHeight;
-  
+
           ready(videoElement);
         });
 
@@ -77,15 +81,15 @@ function loadBodyPix() {
 }
 
 async function drawMask() {
-    const segmentation = await net.segmentPerson(videoElement);
-    const coloredPartImage = bodyPix.toMask(segmentation);
-    const opacity = 1;
-    const flipHorizontal = false;
-    const maskBlurAmount = 0;
-    bodyPix.drawMask(
-      canvasMask, videoElement, coloredPartImage, opacity, maskBlurAmount,
-      flipHorizontal
-    );
+  const segmentation = await net.segmentPerson(videoElement);
+  const coloredPartImage = bodyPix.toMask(segmentation);
+  const opacity = 1;
+  const flipHorizontal = false;
+  const maskBlurAmount = 0;
+  bodyPix.drawMask(
+    canvasMask, videoElement, coloredPartImage, opacity, maskBlurAmount,
+    flipHorizontal
+  );
 }
 
 
@@ -100,30 +104,87 @@ function init3D() {
   const width = videoElement.videoWidth;
   const height = videoElement.videoHeight;
   const maxSide = Math.max(width, height);
-  camera = new THREE.OrthographicCamera( maxSide / - 2, maxSide / 2, maxSide / 2, maxSide / - 2, 1, 1000 );
-  // camera = new THREE.OrthographicCamera( width / - 2, width / 2, height / 2, height / - 2, 1, 1000 );
-  camera.position.z = 250;
+  camera = new THREE.OrthographicCamera(maxSide / - 2, maxSide / 2, maxSide / 2, maxSide / - 2, 1, 1000);
+  camera.position.z = 1000;
 
   scene = new THREE.Scene();
 
   material = new THREE.MeshBasicMaterial({
-    // wireframe: true,
-    side: THREE.DoubleSide,
-    transparent: true, 
-    // opacity: 0, 
-    alphaTest: 0.5,
-    color: 0xffffff
+    // side: THREE.DoubleSide,
+    side: THREE.BackSide,
+    transparent: true,
   });
-  // material.blending = THREE.CustomBlending
-  // material.blendSrc = THREE.OneFactor
-  // material.blendDst = THREE.DistAlpha
+// // scale x2 horizontal
+// texture.repeat.set(0.5, 1);
+// // scale x2 vertical
+// texture.repeat.set(1, 0.5);
+// // scale x2 proportional
+// texture.repeat.set(0.5, 0.5);
 
-  mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
-  mesh.rotation.y += Math.PI;
-  scene.add(mesh);
+    /*
+    Original UVs:
+    0 1
+    1 1
+    0 0
+    1 0
+    */
+
+  mesh1 = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
+  const uv1 = mesh1.geometry.attributes.uv;
+  uv1.setXY(0, 0, 0.5)
+  uv1.setXY(1, 0.5, 0.5)
+  uv1.setXY(2, 0, 0)
+  uv1.setXY(3, 0.5, 0)
+  pivot1 = createPivot(mesh1, 0, -height/2);
+
+
+  mesh2 = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
+  const uv2 = mesh2.geometry.attributes.uv;
+  uv2.setXY(0, 0.5, 0.5)
+  uv2.setXY(1, 1, 0.5)
+  uv2.setXY(2, 0.5, 0)
+  uv2.setXY(3, 1, 0)
+  pivot2 = createPivot(mesh2, 0, -height/2);
+  
+  
+  mesh3 = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
+  const uv3 = mesh3.geometry.attributes.uv;
+  uv3.setXY(0, 0, 1)
+  uv3.setXY(1, 0.5, 1)
+  uv3.setXY(2, 0, 0.5)
+  uv3.setXY(3, 0.5, 0.5)
+  pivot3 = createPivot(mesh3, 0, -height/2);
+  
+  
+  mesh4 = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
+  const uv4 = mesh4.geometry.attributes.uv;
+  uv4.setXY(0, 0.5, 1)
+  uv4.setXY(1, 1, 1)
+  uv4.setXY(2, 0.5, 0.5)
+  uv4.setXY(3, 1, 0.5)
+  pivot4 = createPivot(mesh4, 0, -height/2);
+  
+ 
+ 
+  // mesh1.scale.set(0.5, 0.5, 0.5);
+  // mesh1.position.setX(-width/4);
+  // mesh1.position.setY(height/4);
+  
+  // mesh2.scale.set(0.5, 0.5, 0.5);
+  // mesh2.position.setX(width/4);
+  // mesh2.position.setY(height/4);
+  
+  // mesh3.scale.set(0.5, 0.5, 0.5);
+  // mesh3.position.setX(-width/4);
+  // mesh3.position.setY(-height/4);
+  
+  // mesh4.scale.set(0.5, 0.5, 0.5);
+  // mesh4.position.setX(width/4);
+  // mesh4.position.setY(-height/4);
+
 
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setClearColor( 0x000000, 0 );
+  renderer.setClearColor(0x000000, 0);
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(width, height);
   container.appendChild(renderer.domElement);
@@ -132,18 +193,32 @@ function init3D() {
   material.map = new THREE.CanvasTexture(canvasTexture);
 }
 
+function createPivot(mesh, x, y) {
+  const pivot = new THREE.Group();
+  pivot.rotation.y += Math.PI;
+  mesh.position.set(-x, -y, 0);
+  pivot.position.set(x, y, 0);
+  pivot.add(mesh);
+  scene.add(pivot);
+  return pivot
+}
+  
 function animate() {
 
+  const delta = clock.getDelta();
   requestAnimationFrame(animate);
-
-  // mesh.rotation.x += 0.01;
-  // mesh.rotation.y += 0.01;
+  const speed = 0;
+  pivot1.rotation.x = Math.min(Math.PI, pivot1.rotation.x + delta * speed);
+  pivot2.rotation.x = Math.min(Math.PI, pivot2.rotation.x + delta * speed);
+  pivot3.rotation.x = Math.min(Math.PI, pivot3.rotation.x + delta * speed);
+  pivot4.rotation.x = Math.min(Math.PI, pivot4.rotation.x + delta * speed);
 
   renderer.render(scene, camera);
 
-  counter += clock.getDelta();
-  if (counter > 0.1) {
-    counter = 0;
+  counter += delta;
+  if (counter > 0.5) {
+    // counter = counter % 1;
+    counter -= 0.5;
     sliceOne()
   }
 }
@@ -151,16 +226,21 @@ function animate() {
 function sliceOne() {
   sliceCounter += 1;
   drawMask(videoElement, net);
-  const {width, height} = canvasTexture;
+  const { width, height } = canvasTexture;
 
-  const x = ((sliceCounter+1) % 2) * (width / 2);
-  const y = Math.floor((sliceCounter % 4)/2) * (height / 2);
-  
-
+  const x = ((sliceCounter + 1) % 2) * (width / 2);
+  const y = Math.floor(((sliceCounter) % 4) / 2) * (height / 2);
+  const tile = ((sliceCounter+3) % 4) + 1;
+  switch (tile) {
+    case 1: pivot1.rotation.x = 0; break;
+    case 2: pivot2.rotation.x = 0; break;
+    case 3: pivot3.rotation.x = 0; break;
+    case 4: pivot4.rotation.x = 0; break;
+  }
 
   const imgData = contextMask.getImageData(0, 0, canvasMask.width, canvasMask.height);
   const data = imgData.data;
-  for(let i = 0; i < data.length; i += 4) {
+  for (let i = 0; i < data.length; i += 4) {
     const red = data[i];
     const green = data[i + 1];
     const blue = data[i + 2];
@@ -171,67 +251,8 @@ function sliceOne() {
   }
   contextMask.putImageData(imgData, 0, 0);
 
-  textureContext.clearRect(x, y, width/2, height/2);
-  textureContext.save();
-  
-  // Draw mask to buffer
-  
-  // textureContext.fillStyle = 'rgba(0,0,0,0)'
-  // textureContext.fillRect(x, y, width/2, height/2);
+  textureContext.clearRect(x, y, width / 2, height / 2);
+  textureContext.drawImage(canvasMask, x, y, width / 2, height / 2);
 
-  // textureContext.globalCompositeOperation = 'difference';
-  // textureContext.globalCompositeOperation = 'source-in';
-  // textureContext.globalCompositeOperation = 'source-over';
-    // textureContext.globalCompositeOperation = 'copy';
-    // textureContext.globalCompositeOperation = 'xor';
-    textureContext.drawImage(canvasMask, x, y, width/2, height/2);
-    // Draw the color only where the mask exists (using source-in)
-    
-    // textureContext.globalCompositeOperation = 'destination-out';
-    textureContext.restore();
-  /*
-
-  // textureContext.globalAlpha = 0;
-  // textureContext.fillRect(0, 0, width, height);
-  // textureContext.globalAlpha = 1;
-
-
-  // textureContext.globalAlpha = 1;
-  // textureContext.beginPath();
-  // textureContext.fillStyle = '#110000';
-  // textureContext.fillRect(0, 0, width, height);
-  
-  // textureContext.globalAlpha = 1;
-  const x = ((sliceCounter+1) % 2) * (width / 2);
-  const y = Math.floor((sliceCounter % 4)/2) * (height / 2);
-  // textureContext.rect(sliceCounter*10, 20, 150000, 100);
-  // textureContext.rect(10 * sliceCounter, 20, 10, 100);
-
-  // textureContext.globalCompositeOperation = 'source-over';
-  // textureContext.fillStyle = "rgba(0,0,0,0)";
-  // textureContext.fillStyle = "#FFFFFF00";
-  textureContext.fillStyle = "#00ff0054";
-  // textureContext.globalAlpha = 0
-  textureContext.clearRect(0, 0, width, height);
-
-  // textureContext.globalCompositeOperation = 'destination-out';
-  // textureContext.globalCompositeOperation = 'lighter';
-  textureContext.globalCompositeOperation = 'luminosity';
-  // textureContext.fillRect(x, y, width/2, height/2);
-  textureContext.drawImage(canvasMask, x, y, width/2, height/2);
-  // textureContext.globalCompositeOperation = 'source-over';
-  
-  */
-  // textureContext.fill();
-
-  // textureContext.globalAlpha = 1;
-  // const x = (sliceCounter % 2) * (width / 2);
-  // const y = ((sliceCounter+1) % 2) * (width / 2);
-  // textureContext.clearRect(0, 0, width, height);
-  // textureContext.drawImage(canvasMask, 0,0);
-  // need to flag the map as needing updating.
   material.map.needsUpdate = true;
-  // material.transparent = true;
-
-
 }
