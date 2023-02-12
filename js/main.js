@@ -7,8 +7,8 @@
 const canvasMask = document.createElement('canvas');
 const canvasTexture = document.createElement('canvas');
 const textureContext = canvasTexture.getContext('2d');
+let videoElement, net;
 let camera, renderer, scene, material, mesh, clock, counter;
-
 const startBtn = document.getElementById('start-btn');
 
 startBtn.addEventListener('click', e => {
@@ -20,12 +20,14 @@ init()
 
 async function init() {
  
-  const videoElement = await initVideoStream();
-  // document.body.appendChild(videoElement);
-  document.body.appendChild(canvasMask);
+  videoElement = await initVideoStream();
 
-  await loadBodyPix(videoElement);
-  init3D(videoElement.videoWidth, videoElement.videoHeight);
+  document.body.appendChild(videoElement);
+  // document.body.appendChild(canvasMask);
+
+  net = await loadBodyPix();
+  drawMask();
+  init3D();
   animate();
 }
 
@@ -57,7 +59,7 @@ function initVideoStream() {
 //   videoElement.srcObject = null;
 // }
 
-function loadBodyPix(videoElement) {
+function loadBodyPix() {
   console.log('Initializing BodyPix Library...')
   return new Promise(ready => {
     const options = {
@@ -66,13 +68,12 @@ function loadBodyPix(videoElement) {
       quantBytes: 4,
     }
     return bodyPix.load(options)
-      .then(net => { ready(); drawMask(videoElement, net) })
+      .then(net => ready(net))
       .catch(err => console.log(err))
   });
 }
 
-async function drawMask(videoElement, net) {
-  while (true) {
+async function drawMask() {
     const segmentation = await net.segmentPerson(videoElement);
     const coloredPartImage = bodyPix.toMask(segmentation);
     const opacity = 1;
@@ -82,18 +83,18 @@ async function drawMask(videoElement, net) {
       canvasMask, videoElement, coloredPartImage, opacity, maskBlurAmount,
       flipHorizontal
     );
-  }
 }
 
 
 
 
-function init3D(width, height) {
+function init3D() {
   console.log('Initializing Three...');
 
   clock = new THREE.Clock();
   counter = 0;
-
+  const width = videoElement.videoWidth;
+  const height = videoElement.videoHeight;
   camera = new THREE.PerspectiveCamera(50, width / height, 1, 2000);
   camera.position.z = 250;
 
@@ -130,6 +131,7 @@ function animate() {
 }
 
 function sliceOne() {
+  drawMask(videoElement, net);
   textureContext.drawImage(canvasMask, 0, 0);
   // need to flag the map as needing updating.
   material.map.needsUpdate = true;
