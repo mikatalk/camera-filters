@@ -3,16 +3,11 @@
 // https://github.com/vinooniv/video-bg-blur/
 // https://blog.francium.tech/edit-live-video-background-with-webrtc-and-tensorflow-js-c67f92307ac5
 
-const videoElement = document.createElement('video');
+// const videoElement = document.createElement('video');
 const canvasMask = document.createElement('canvas');
 const canvasTexture = document.createElement('canvas');
 const textureContext = canvasTexture.getContext('2d');
-
-const width = 640;
-const height = 480;
-
-canvasTexture.width = canvasMask.width = videoElement.width = width;
-canvasTexture.height = canvasMask.height = videoElement.height = height;
+let camera, renderer, scene, material, mesh, clock, counter;
 
 const startBtn = document.getElementById('start-btn');
 
@@ -23,18 +18,19 @@ startBtn.addEventListener('click', e => {
 
 init()
 
-function init() {
-  initVideoStream()
-    .then(() => {
-      // document.body.appendChild(videoElement);
-      document.body.appendChild(canvasMask);
-    })
-    .then(loadBodyPix)
-    .then(init3D)
-    .then(animate)
+async function init() {
+ 
+  const videoElement = await initVideoStream();
+  // document.body.appendChild(videoElement);
+  document.body.appendChild(canvasMask);
+
+  await loadBodyPix(videoElement);
+  init3D(videoElement.videoWidth, videoElement.videoHeight);
+  animate();
 }
 
 function initVideoStream() {
+  const videoElement = document.createElement('video');
   console.log('Initializing Video Strem...')
   return new Promise(ready => {
     navigator.mediaDevices.getUserMedia({ video: true, audio: false })
@@ -42,14 +38,14 @@ function initVideoStream() {
         videoElement.srcObject = stream;
         videoElement.play();
         videoElement.addEventListener('playing', (event) => {
-          ready();
+          canvasTexture.width = canvasMask.width = videoElement.width = videoElement.videoWidth;
+          canvasTexture.height = canvasMask.height = videoElement.height = videoElement.videoHeight;
+  
+          ready(videoElement);
         });
 
       })
       .catch(err => {
-        startBtn.disabled = false;
-        blurBtn.disabled = true;
-        stopBtn.disabled = true;
         alert(`[Error occurred]: ${err}`);
       });
   })
@@ -61,7 +57,7 @@ function initVideoStream() {
 //   videoElement.srcObject = null;
 // }
 
-function loadBodyPix() {
+function loadBodyPix(videoElement) {
   console.log('Initializing BodyPix Library...')
   return new Promise(ready => {
     const options = {
@@ -70,12 +66,12 @@ function loadBodyPix() {
       quantBytes: 4,
     }
     return bodyPix.load(options)
-      .then(net => { ready(); drawMask(net)})
+      .then(net => { ready(); drawMask(videoElement, net) })
       .catch(err => console.log(err))
   });
 }
 
-async function drawMask(net) {
+async function drawMask(videoElement, net) {
   while (true) {
     const segmentation = await net.segmentPerson(videoElement);
     const coloredPartImage = bodyPix.toMask(segmentation);
@@ -92,8 +88,12 @@ async function drawMask(net) {
 
 
 
-function init3D() {
-  console.log('Initializing Three...')
+function init3D(width, height) {
+  console.log('Initializing Three...');
+
+  clock = new THREE.Clock();
+  counter = 0;
+
   camera = new THREE.PerspectiveCamera(50, width / height, 1, 2000);
   camera.position.z = 250;
 
@@ -109,27 +109,8 @@ function init3D() {
   renderer.setSize(width, height);
   document.body.appendChild(renderer.domElement);
 
-  window.addEventListener('resize', onWindowResize);
-
   // set canvas as material.map
   material.map = new THREE.CanvasTexture(canvasTexture);
-}
-
-function drawTexture3D() {
-  const context = canvasTexture.getContext( '2d' );
-
-  // need to flag the map as needing updating.
-  material.map.needsUpdate = true;
-
-}
-
-function onWindowResize() {
-
-  camera.aspect = width / height;
-  camera.updateProjectionMatrix();
-
-  renderer.setSize(width, height);
-
 }
 
 function animate() {
@@ -140,5 +121,17 @@ function animate() {
   mesh.rotation.y += 0.01;
 
   renderer.render(scene, camera);
+
+  counter += clock.getDelta();
+  if (counter > 1) {
+    counter = 0;
+    sliceOne()
+  }
+}
+
+function sliceOne() {
+  textureContext.drawImage(canvasMask, 0, 0);
+  // need to flag the map as needing updating.
+  material.map.needsUpdate = true;
 
 }
