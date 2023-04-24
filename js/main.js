@@ -2,45 +2,58 @@
 // https://github.com/tensorflow/tfjs-models/blob/master/body-pix/README-v1.md
 // https://github.com/vinooniv/video-bg-blur/
 // https://blog.francium.tech/edit-live-video-background-with-webrtc-and-tensorflow-js-c67f92307ac5
+import * as THREE from 'three';
+import Stats from 'three/addons/libs/stats.module.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
 
 // const videoElement = document.createElement('video');
 const container = document.querySelector('.container');
 const canvasMask = document.createElement('canvas');
+// const canvasTextureFront = document.createElement('canvas');
+// const textureContextFront = canvasTextureFront.getContext('2d');
 const canvasTexture = document.createElement('canvas');
 const textureContext = canvasTexture.getContext('2d');
 const contextMask = canvasMask.getContext('2d');
-
+// contextMask.willReadFrequently = true;
+// textureContext.willReadFrequently = true;
+// textureContextFront.willReadFrequently = true;
+let width, height, maxSide;
 let videoElement, net;
 let camera, renderer, scene, material, clock, counter, sliceCounter;
-let pivot1, pivot2, pivot3, pivot4, mesh1, mesh2, mesh3, mesh4;
+const meshes = [];
+let backgroundMesh;
+let stats, mixer;
+let stickerTexture, stickerMesh, fallAction;
 const startBtn = document.getElementById('start-btn');
-
-startBtn.addEventListener('click', e => {
-  startBtn.parentElement.removeChild(startBtn);
-  init();
-})
+// const stickerTint = new THREE.Color()
+// startBtn.addEventListener('click', e => {
+//   startBtn.parentElement.removeChild(startBtn);
+//   init();
+// })
 
 init()
 
 async function init() {
 
   videoElement = await initVideoStream();
-
-  container.appendChild(videoElement);
+  // debug sources
+  // container.appendChild(videoElement);
   // container.appendChild(canvasMask);
-  document.body.appendChild(canvasTexture);
-  canvasTexture.style.position = 'relative';
-  canvasTexture.style.width = '100px';
+  // debug tiles
+  // document.body.appendChild(canvasTexture);
+  // canvasTexture.style.position = 'relative';
+  // canvasTexture.style.width = '100px';
 
   net = await loadBodyPix();
-  // drawMask();
   init3D();
   animate();
 }
 
 function initVideoStream() {
   const videoElement = document.createElement('video');
-  console.log('Initializing Video Strem...')
+  console.log('Initializing Video Stream...')
   return new Promise(ready => {
     navigator.mediaDevices.getUserMedia({ video: true, audio: false })
       .then(stream => {
@@ -92,95 +105,63 @@ async function drawMask() {
   );
 }
 
-
-
-
 function init3D() {
   console.log('Initializing Three...');
 
   clock = new THREE.Clock();
   counter = 0;
   sliceCounter = 0;
-  const width = videoElement.videoWidth;
-  const height = videoElement.videoHeight;
-  const maxSide = Math.max(width, height);
-  camera = new THREE.OrthographicCamera(maxSide / - 2, maxSide / 2, maxSide / 2, maxSide / - 2, 1, 1000);
-  camera.position.z = 1000;
+  width = videoElement.videoWidth;
+  height = videoElement.videoHeight;
+  maxSide = Math.max(width, height);
+  camera = new THREE.OrthographicCamera(width / - 2, width / 2, height / 2, height / - 2, 1, 1000);
+  camera.position.set(0, 0, 500);
+  // camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 100000 );
+  // camera.position.set( 0,0, 500  );
 
   scene = new THREE.Scene();
 
-  material = new THREE.MeshBasicMaterial({
-    // side: THREE.DoubleSide,
-    side: THREE.BackSide,
-    transparent: true,
+  backgroundMesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({
+    side: THREE.DoubleSide,
+    map: new THREE.VideoTexture(videoElement)
+  }));
+  backgroundMesh.rotation.y = -Math.PI;
+  backgroundMesh.position.set(0, 0, 110);
+  scene.add(backgroundMesh);
+
+  const loader = new GLTFLoader();
+  loader.load('./../models/sticker.glb', function (gltf) {
+
+    scene.add(gltf.scene);
+
+    gltf.scene.traverse(function (child) {
+      if (child.name === 'StickerPlaneMesh') {
+        stickerTexture = new THREE.CanvasTexture(canvasTexture);
+        stickerTexture.wrapT = stickerTexture.wrapS = THREE.RepeatWrapping;
+        stickerTexture.repeat.x = - 1;
+        stickerTexture.repeat.y = - 1;
+        child.material = new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          side: THREE.DoubleSide,
+          map: stickerTexture,
+        });
+        child.geometry.scale(width / 2, height / 2, 1);
+        stickerMesh = child;
+      } else
+        if (child.name === 'StickerPlane') {
+          child.position.set(0, -height * 0.5, 115)
+        }
+
+    });
+
+    fallAction = gltf.animations[0]
+        mixer = new THREE.AnimationMixer(gltf.scene);
+        mixer.clipAction(fallAction).play();
+        fallAction.clampWhenFinished = true;
+        mixer.timeScale = 2;
+
   });
-// // scale x2 horizontal
-// texture.repeat.set(0.5, 1);
-// // scale x2 vertical
-// texture.repeat.set(1, 0.5);
-// // scale x2 proportional
-// texture.repeat.set(0.5, 0.5);
-
-    /*
-    Original UVs:
-    0 1
-    1 1
-    0 0
-    1 0
-    */
-
-  mesh1 = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
-  const uv1 = mesh1.geometry.attributes.uv;
-  uv1.setXY(0, 0, 0.5)
-  uv1.setXY(1, 0.5, 0.5)
-  uv1.setXY(2, 0, 0)
-  uv1.setXY(3, 0.5, 0)
-  pivot1 = createPivot(mesh1, 0, -height/2);
-
-
-  mesh2 = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
-  const uv2 = mesh2.geometry.attributes.uv;
-  uv2.setXY(0, 0.5, 0.5)
-  uv2.setXY(1, 1, 0.5)
-  uv2.setXY(2, 0.5, 0)
-  uv2.setXY(3, 1, 0)
-  pivot2 = createPivot(mesh2, 0, -height/2);
-  
-  
-  mesh3 = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
-  const uv3 = mesh3.geometry.attributes.uv;
-  uv3.setXY(0, 0, 1)
-  uv3.setXY(1, 0.5, 1)
-  uv3.setXY(2, 0, 0.5)
-  uv3.setXY(3, 0.5, 0.5)
-  pivot3 = createPivot(mesh3, 0, -height/2);
-  
-  
-  mesh4 = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
-  const uv4 = mesh4.geometry.attributes.uv;
-  uv4.setXY(0, 0.5, 1)
-  uv4.setXY(1, 1, 1)
-  uv4.setXY(2, 0.5, 0.5)
-  uv4.setXY(3, 1, 0.5)
-  pivot4 = createPivot(mesh4, 0, -height/2);
-  
- 
- 
-  // mesh1.scale.set(0.5, 0.5, 0.5);
-  // mesh1.position.setX(-width/4);
-  // mesh1.position.setY(height/4);
-  
-  // mesh2.scale.set(0.5, 0.5, 0.5);
-  // mesh2.position.setX(width/4);
-  // mesh2.position.setY(height/4);
-  
-  // mesh3.scale.set(0.5, 0.5, 0.5);
-  // mesh3.position.setX(-width/4);
-  // mesh3.position.setY(-height/4);
-  
-  // mesh4.scale.set(0.5, 0.5, 0.5);
-  // mesh4.position.setX(width/4);
-  // mesh4.position.setY(-height/4);
 
 
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -189,70 +170,62 @@ function init3D() {
   renderer.setSize(width, height);
   container.appendChild(renderer.domElement);
 
-  // set canvas as material.map
-  material.map = new THREE.CanvasTexture(canvasTexture);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enablePan = false;
+  controls.minDistance = 0.5;
+  controls.maxDistance = 50000;
 }
 
-function createPivot(mesh, x, y) {
-  const pivot = new THREE.Group();
-  pivot.rotation.y += Math.PI;
-  mesh.position.set(-x, -y, 0);
-  pivot.position.set(x, y, 0);
-  pivot.add(mesh);
-  scene.add(pivot);
-  return pivot
-}
-  
 function animate() {
 
   const delta = clock.getDelta();
   requestAnimationFrame(animate);
-  const speed = 0;
-  pivot1.rotation.x = Math.min(Math.PI, pivot1.rotation.x + delta * speed);
-  pivot2.rotation.x = Math.min(Math.PI, pivot2.rotation.x + delta * speed);
-  pivot3.rotation.x = Math.min(Math.PI, pivot3.rotation.x + delta * speed);
-  pivot4.rotation.x = Math.min(Math.PI, pivot4.rotation.x + delta * speed);
-
-  renderer.render(scene, camera);
 
   counter += delta;
   if (counter > 0.5) {
-    // counter = counter % 1;
-    counter -= 0.5;
-    sliceOne()
+    counter = 0;
+    if (stickerMesh) {
+      stickerMesh.material.color.setHSL(Math.random(), 0.75, 0.75);
+    }
+    mixer.clipAction(fallAction).reset();
   }
+  sliceOne()
+  if ( mixer ) mixer.update(delta);
+  renderer.render(scene, camera);
 }
 
-function sliceOne() {
-  sliceCounter += 1;
+
+function sliceOne(mesh) {
   drawMask(videoElement, net);
   const { width, height } = canvasTexture;
-
-  const x = ((sliceCounter + 1) % 2) * (width / 2);
-  const y = Math.floor(((sliceCounter) % 4) / 2) * (height / 2);
-  const tile = ((sliceCounter+3) % 4) + 1;
-  switch (tile) {
-    case 1: pivot1.rotation.x = 0; break;
-    case 2: pivot2.rotation.x = 0; break;
-    case 3: pivot3.rotation.x = 0; break;
-    case 4: pivot4.rotation.x = 0; break;
-  }
+  const numPerSide = 1;
+  const x = (sliceCounter % numPerSide) * (width / numPerSide);
+  const y = (Math.floor(sliceCounter / numPerSide) % numPerSide) * (height / numPerSide);
 
   const imgData = contextMask.getImageData(0, 0, canvasMask.width, canvasMask.height);
   const data = imgData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    const red = data[i];
-    const green = data[i + 1];
-    const blue = data[i + 2];
-    const alpha = data[i + 3];
+  for (let i4 = 0; i4 < data.length; i4 += 4) {
+    const red = data[i4];
+    const green = data[i4 + 1];
+    const blue = data[i4 + 2];
+    const alpha = data[i4 + 3];
     if (!red && !green && !blue) {
-      data[i + 3] = 0;
+      data[i4 + 3] = 0;
     }
   }
   contextMask.putImageData(imgData, 0, 0);
 
-  textureContext.clearRect(x, y, width / 2, height / 2);
-  textureContext.drawImage(canvasMask, x, y, width / 2, height / 2);
-
-  material.map.needsUpdate = true;
+  textureContext.clearRect(x, y, width / numPerSide, height / numPerSide);
+  // White border
+  const borderSize = 7;
+  textureContext.filter = `
+    drop-shadow(${borderSize}px 0px 0 white)
+    drop-shadow(-${borderSize}px 0px 0 white)
+    drop-shadow(0px -${borderSize}px 0 white)
+    drop-shadow(0px ${borderSize}px 0 white)
+  `;
+  textureContext.drawImage(canvasMask, x, y, width / numPerSide, height / numPerSide);
+  if (stickerMesh) {
+    stickerMesh.material.map.needsUpdate = true;
+  }
 }
