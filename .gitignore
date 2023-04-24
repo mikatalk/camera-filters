@@ -102,10 +102,3 @@ dist
 
 # TernJS port file
 .tern-port
-
-
-
-!node_modules/three/examples/jsm/controls/OrbitControls.js
-!node_modules/three/build/three.module.js
-!node_modules/three/examples/jsm/libs/stats.module.js
-!node_modules/three/examples/jsm/loaders/GLTFLoader.js
