@@ -129,7 +129,7 @@ function init3D() {
   scene.add(backgroundMesh);
 
   const loader = new GLTFLoader();
-  loader.load('./../camera-filters/models/sticker.glb', function (gltf) {
+  loader.load('https://mikatalk.github.io/camera-filters/models/sticker.glb', function (gltf) {
 
     scene.add(gltf.scene);
 
